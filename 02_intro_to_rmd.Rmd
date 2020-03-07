@@ -1,0 +1,114 @@
+---
+title: "Why Rmarkdown?"
+output:
+  html_document:
+    theme: flatly
+    df_print: paged
+    code_folding: hide
+---
+
+<style>.pagedtable-header-type { display:none }</style>
+
+<br/>
+
+<!-- ![](KRUG_image.jpeg){width=20%} -->
+
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, comment = "")
+
+library(dplyr)
+library(DT)
+library(ggtext)
+library(ggplot2)
+library(plotly)
+```
+
+<br/>
+
+#### **Rmarkdown makes it easy to**
+
+- combine multilingual code and prose
+
+- well-formatted, easily shareable outputs
+
+- reproducibility: workflow automation, version control
+
+<br/>
+
+#### **Today's data set:** {.tabset}
+
+We’ll be using the hotels reservation data from [#TidyTuesday](https://twitter.com/hashtag/TidyTuesday) (preprocessed in `01_transform.R`).
+
+##### Data set
+
+<br/>
+
+```{r}
+hotels_orig <- 
+  read.csv("tidy_tues_hotels.csv") %>% 
+  mutate(arrival_ymd = lubridate::ymd(arrival_ymd))
+
+# you can make sure the upstream preprocessing was correct
+stopifnot(length(unique(hotels_orig$hotel)) == 2)
+```
+
+```{r}
+# prep data for plots
+hotels_data <- 
+  filter(
+    hotels_orig,
+    arrival_year == 2016 & arrival_month == "March"
+  )
+```
+
+`r format(nrow(hotels_data), big.mark = ",")` reservations were made for March 2016.
+
+```{r echo=TRUE}
+datatable(
+  hotels_data,
+  rownames = FALSE,
+  filter = "top", 
+  options = list(scrollX = TRUE, dom = 'tip')
+)
+```
+
+
+<br/>
+
+##### Static plot
+
+<br/>
+
+```{r}
+formated_title <- "Number of <span style = 'color:#0088BC;'>check-ins</span> and <span style = 'color:#D83F1F;'>cancelations</span> for each arrival date"
+
+reservation_plot <-
+  hotels_data %>%
+  count(is_canceled, arrival_ymd, name = "num_records") %>% 
+  rename("Arrival date" = arrival_ymd, "Number of reservations" = num_records) %>% 
+  ggplot(aes(`Arrival date`, `Number of reservations`, group = is_canceled, colour = is_canceled)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "", y = "Number of records") +
+  theme_bw() +
+  scale_color_manual(values = c("FALSE" = "#0088BC", "TRUE" = "#D83F1F")) +
+  labs(title = formated_title) +
+  theme(
+    plot.title = element_markdown(hjust = 0.5),
+    legend.position = "none"
+  )
+
+reservation_plot
+```
+
+<br/>
+
+##### Interacitve plot
+
+<br/>
+
+```{r}
+ggplotly(reservation_plot, tooltip = c("x", "y"))
+```
+
+<br/>

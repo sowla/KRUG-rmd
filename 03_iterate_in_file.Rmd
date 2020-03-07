@@ -1,0 +1,104 @@
+---
+output:
+  html_document:
+    theme: flatly
+---
+
+
+### Check-ins and cancelations for 2016 {.tabset}
+
+<br/>
+
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(dplyr)
+library(ggplot2)
+library(ggtext)
+library(plotly)
+
+source("core_functions.R")
+```
+
+```{r}
+hotels_orig <- read.csv("tidy_tues_hotels.csv")
+```
+
+```{r}
+hotels_data <- 
+  hotels_orig %>% 
+  mutate(arrival_ymd = lubridate::ymd(arrival_ymd)) %>%
+  filter(arrival_year == 2016)
+```
+
+<br/>
+
+```{r}
+gen_monthly_plot <- function(month) {
+  process_df(month) %>% 
+    gen_plot() %>% 
+    make_interactive()
+}
+```
+
+#### January
+
+<br/>
+
+```{r}
+gen_monthly_plot("January")
+```
+
+#### February
+
+<br/>
+
+```{r}
+gen_monthly_plot("February")
+```
+
+#### March
+
+<br/>
+
+```{r}
+gen_monthly_plot("March")
+```
+
+```{r}
+gen_monthly_section <- function(month) {
+  cat(paste("\n#### ", month))
+  
+  cat("\n\n<br/>\n\n")
+  
+  # return every plot, not just the last one generated in the final (iteration) function call
+  gen_monthly_plot(month) %>% 
+    print()
+  
+  # for something more complicated, you might want to use knitr::knit_expand with glue::glue
+}
+```
+
+```{r results='asis'}
+for (month in month.name[4:6]) {
+  gen_monthly_section(month)
+}
+```
+
+```{r results='asis'}
+purrr::walk(month.name[7:9], gen_monthly_section)
+```
+
+```{r results='asis'}
+lapply(month.name[8:12], gen_monthly_section) %>%
+  
+  # to get side effects only, like purrr::walk
+  invisible()
+```
+
+```{r include=FALSE}
+# also invisibly plot plotly outside of loop because of this issue:
+# https://github.com/ropensci/plotly/issues/273
+
+plot_ly(x = rnorm(10), type = "histogram")
+```

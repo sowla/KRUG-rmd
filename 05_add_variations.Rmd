@@ -1,0 +1,143 @@
+---
+title: ''
+output:
+  word_document:
+    fig_width: 8
+  html_document: default
+params:
+  months:
+    choices: !r month.name
+    input: select
+    label: Months
+    multiple: yes
+    value: !r month.name
+  year:
+    input: numeric
+    label: Year
+    max: 2017
+    min: 2015
+    step: 1
+    value: 2016
+always_allow_html: yes
+---
+
+### Check-ins and cancelations for `r params$year` {.tabset}
+
+<br/>
+
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(ggtext)
+library(plotly)
+library(glue)
+
+source("core_functions.R")
+```
+
+```{r}
+hotels_orig <- read.csv("tidy_tues_hotels.csv")
+```
+
+```{r}
+hotels_data <- 
+  hotels_orig %>% 
+  mutate(
+    arrival_ymd = ymd(arrival_ymd),
+    reservation_status_date = ymd(reservation_status_date)) %>%
+  filter(arrival_year == params$year)
+```
+
+```{r echo=FALSE}
+gen_monthly_text <- function(month) {
+  hotels_month_data <- 
+    filter(hotels_data, arrival_month == month)
+  
+  total_records <- 
+    hotels_month_data %>% 
+    nrow()
+  
+  total_checkins <- 
+    filter(hotels_month_data, !is_canceled) %>% 
+    nrow()
+  
+  cancel_30_pct <- 
+    hotels_month_data %>% 
+    count(is_canceled, arrival_ymd, name = "num_records") %>% 
+    pivot_wider(names_from = is_canceled, values_from = num_records) %>% 
+    rename(cancelations = `TRUE`, check_ins = `FALSE`) %>% 
+    mutate(pct_cancelations = cancelations / (check_ins + cancelations) * 100) %>%
+    filter(pct_cancelations > 30) %>% 
+    nrow()
+  
+  med_lead_time <- 
+    hotels_month_data %>% 
+    filter(is_canceled) %>% 
+    mutate(
+      lead_cancelation_time = reservation_status_date - arrival_ymd
+    ) %>% 
+    summarise(med_lead_cancel_time = median(lead_cancelation_time), med_lead_reserve_time = median(lead_time))
+  
+  med_lead_cancel_time <- med_lead_time$med_lead_cancel_time
+  med_lead_reserve_time <- med_lead_time$med_lead_reserve_time
+  
+  stopifnot(med_lead_cancel_time < 0)
+  stopifnot(med_lead_reserve_time > 0)
+  
+  high_cancelations <- cancel_30_pct > 15
+  
+  standard_text <- glue("\n<br/>\n
+  Out of all {scales::comma(total_records)} reservations due to arrive in {month}, {scales::comma(total_checkins)} ({scales::percent(total_checkins / total_records)}) eventually checked-in.")
+  
+  cancel_text <- glue("Cancelation rates were high, with more than 30% cancelations on {cancel_30_pct} days. On average (median), these reservations and cancelations were made {med_lead_reserve_time} and {abs(med_lead_cancel_time)} days before the arrival date, respectively.")
+  
+  plot_text <- 
+    if (high_cancelations ) {
+      paste(standard_text, cancel_text)
+    } else {
+      standard_text
+    }
+  
+  plot_text
+  
+}
+```
+
+```{r}
+gen_monthly_section <- function(month) {
+  if (nrow(process_df(month)) == 0) {
+    return(invisible())
+  }
+  
+  cat(paste("\n\n#### ", month))
+  cat("\n\n<br/>\n\n")
+  
+  process_df(month) %>% 
+    gen_plot() %>% 
+    {
+      if (identical(knitr:::pandoc_to(), "html")) {
+        make_interactive(.)
+      } else {
+        .
+      }
+    } %>% 
+    print()
+  
+  cat(gen_monthly_text(month))
+}
+```
+
+```{r results='asis'}
+purrr::walk(params$months, gen_monthly_section)
+```
+
+
+```{r include=FALSE}
+# also invisibly plot plotly outside of loop because of this issue:
+# https://github.com/ropensci/plotly/issues/273
+
+plot_ly(x = rnorm(10), type = "histogram")
+```
